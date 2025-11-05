@@ -1,11 +1,12 @@
 # filename: main.py
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request,HTTPException,Header
 import requests
 import os
 import base64
 from pydantic import BaseModel
 from google import genai
+import time
 
 app = FastAPI()
 
@@ -16,6 +17,7 @@ ACEFONE_EMAIL = os.getenv("ACEFONE_EMAIL")        # e.g. udipth@gmail.com
 ACEFONE_PASSWORD = os.getenv("ACEFONE_PASSWORD")  # your Acefone password
 BITRIX_WEBHOOK = os.getenv("BITRIX_WEBHOOK")      # e.g. https://finideas.bitrix24.in/rest/24/abc123xyz/
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")      # from https://aistudio.google.com/app/apikey
+ACF_SECRET = os.getenv("ACF_SECRET")              # your Acefone webhook secret
 
 ACEFONE_LOGIN_URL = "https://api.acefone.in/v1/auth/login"
 ACEFONE_LOG_URL = "https://api.acefone.in/v1/call/records"
@@ -164,12 +166,18 @@ def post_comment_to_lead(lead_id, text):
 # MAIN ENDPOINT
 # ==============================
 @app.post("/acefone/call-ended")
-async def acefone_webhook(payload: AcefoneWebhook):
+async def acefone_webhook(payload: AcefoneWebhook, x_secret: str = Header(None)):
+    if ACF_SECRET and x_secret != os.getenv("ACF_SECRET"):
+        raise HTTPException(status_code=403, detail="Unauthorized")
+    
     """Triggered automatically when Acefone call ends"""
     if payload.status and payload.status.lower() != "completed":
         return {"message": "Call not completed. Ignoring."}
 
     print(f"🎧 Processing call_id={payload.call_id}")
+
+    # --- 3️⃣ Delay to ensure recording ready ---
+    time.sleep(15)  # wait 15 seconds before downloading audio
 
     # 1️⃣ Login to Acefone
     try:

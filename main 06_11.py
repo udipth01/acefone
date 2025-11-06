@@ -58,14 +58,13 @@ def fetch_call_details(token, call_id):
 
 
 def download_audio(url):
-    """Download MP3 recording from Acefone with retries"""
-    for attempt in range(3):
-        r = requests.get(url)
-        if r.status_code == 200 and len(r.content) > 5000:
-            return r.content
-        print(f"⚠️ Attempt {attempt+1}: Recording not ready ({r.status_code}), retrying...")
-        time.sleep(60)
-    raise Exception(f"Failed to download audio after 3 retries (last status {r.status_code})")
+    """Download MP3 recording from Acefone"""
+    r = requests.get(url)
+    if r.status_code != 200:
+        raise Exception(f"Failed to download audio: {r.status_code}")
+    if len(r.content) < 5000:
+        raise Exception("Audio file too small or not ready.")
+    return r.content
 
 
 def transcribe_with_gemini(audio_bytes):
@@ -119,25 +118,16 @@ def summarize_with_gemini(transcript):
 
 
 def find_bitrix_lead_id(phone):
-    """Find Bitrix Lead ID by phone number (smart normalization)"""
+    """Find Bitrix Lead ID by phone number"""
     if not phone:
         return None
-
-    # Normalize phone to digits only
-    digits = "".join(filter(str.isdigit, phone))
-
+    phone = phone.replace("+", "").strip()
     url = f"{BITRIX_WEBHOOK}crm.lead.list.json"
-    r = requests.get(url, params={"select[]": ["ID", "TITLE", "PHONE"], "filter[>ID]": 0})
-    leads = r.json().get("result", [])
-
-    for lead in leads:
-        phones = [p.get("VALUE") for p in (lead.get("PHONE") or [])]
-        for p in phones:
-            if p:
-                clean = "".join(filter(str.isdigit, p))
-                if clean.endswith(digits[-10:]):  # compare last 10 digits
-                    return lead["ID"]
-
+    params = {"filter[PHONE]": phone, "select[]": ["ID", "TITLE", "PHONE"]}
+    r = requests.get(url, params=params)
+    data = r.json()
+    if data.get("result"):
+        return data["result"][0]["ID"]
     return None
 
 
@@ -187,7 +177,7 @@ async def acefone_webhook(payload: AcefoneWebhook, x_secret: str = Header(None))
     print(f"🎧 Processing call_id={payload.call_id}")
 
     # --- 3️⃣ Delay to ensure recording ready ---
-    time.sleep(60)  # wait 15 seconds before downloading audio
+    time.sleep(15)  # wait 15 seconds before downloading audio
 
     # 1️⃣ Login to Acefone
     try:

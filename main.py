@@ -185,6 +185,7 @@ async def acefone_webhook(payload: AcefoneWebhook, x_secret: str = Header(None))
         return {"message": "Call not completed. Ignoring."}
 
     print(f"🎧 Processing call_id={payload.call_id}")
+    
 
     # --- 3️⃣ Delay to ensure recording ready ---
     time.sleep(60)  # wait 60 seconds before downloading audio
@@ -235,6 +236,9 @@ async def acefone_webhook(payload: AcefoneWebhook, x_secret: str = Header(None))
         f"🎧 **Transcription:**\n{transcription[:5000]}\n\n"
         f"🔗 [Recording Link]({recording_url})"
     )
+
+    print(f"📲 Logging call for phone={phone}, entity_type={entity_type}, entity_id={entity_id}")
+
     # Then post the summary/comment
     post_comment_to_entity(entity_id, entity_type, comment)
 

@@ -118,27 +118,27 @@ def summarize_with_gemini(transcript):
     return summary
 
 
-def find_bitrix_lead_id(phone):
-    """Find Bitrix Lead ID by phone number (smart normalization)"""
+def find_bitrix_lead_or_contact(phone):
+    """Find the most relevant Bitrix entity (lead or contact) by phone number"""
     if not phone:
-        return None
+        return None, None  # (id, type)
 
-    # Normalize phone to digits only
-    digits = "".join(filter(str.isdigit, phone))
+    url = f"{BITRIX_WEBHOOK}crm.duplicate.findbycomm.json"
+    params = {"type": "PHONE", "values[0]": phone}
+    r = requests.get(url, params=params)
+    data = r.json()
+    result = data.get("result", {})
 
-    url = f"{BITRIX_WEBHOOK}crm.lead.list.json"
-    r = requests.get(url, params={"select[]": ["ID", "TITLE", "PHONE"], "filter[>ID]": 0})
-    leads = r.json().get("result", [])
+    leads = result.get("LEAD", [])
+    contacts = result.get("CONTACT", [])
 
-    for lead in leads:
-        phones = [p.get("VALUE") for p in (lead.get("PHONE") or [])]
-        for p in phones:
-            if p:
-                clean = "".join(filter(str.isdigit, p))
-                if clean.endswith(digits[-10:]):  # compare last 10 digits
-                    return lead["ID"]
+    if leads:
+        return max(leads), "lead"
+    elif contacts:
+        return max(contacts), "contact"
 
-    return None
+    return None, None
+
 
 
 def create_bitrix_lead(phone):
@@ -157,13 +157,13 @@ def create_bitrix_lead(phone):
     return data.get("result")
 
 
-def post_comment_to_lead(lead_id, text):
-    """Post transcription + summary as comment in lead timeline"""
+def post_comment_to_entity(entity_id, entity_type, text):
+    """Post transcription + summary as comment in Bitrix entity (lead/contact)"""
     url = f"{BITRIX_WEBHOOK}crm.timeline.comment.add.json"
     payload = {
         "fields": {
-            "ENTITY_ID": lead_id,
-            "ENTITY_TYPE": "lead",
+            "ENTITY_ID": entity_id,
+            "ENTITY_TYPE": entity_type,
             "COMMENT": text
         }
     }
@@ -187,7 +187,7 @@ async def acefone_webhook(payload: AcefoneWebhook, x_secret: str = Header(None))
     print(f"🎧 Processing call_id={payload.call_id}")
 
     # --- 3️⃣ Delay to ensure recording ready ---
-    time.sleep(60)  # wait 15 seconds before downloading audio
+    time.sleep(60)  # wait 60 seconds before downloading audio
 
     # 1️⃣ Login to Acefone
     try:
@@ -219,10 +219,15 @@ async def acefone_webhook(payload: AcefoneWebhook, x_secret: str = Header(None))
     except Exception as e:
         summary = f"Summary failed: {e}"
 
-    # 5️⃣ Find or create lead
-    lead_id = find_bitrix_lead_id(phone)
-    if not lead_id:
-        lead_id = create_bitrix_lead(phone)
+    entity_id, entity_type = find_bitrix_lead_or_contact(phone)
+
+    # If no existing entity, create a new Lead
+    if not entity_id:
+        entity_id = create_bitrix_lead(phone)
+        entity_type = "lead"
+
+    # Then post the summary/comment
+    post_comment_to_entity(entity_id, entity_type, comment)
 
     # 6️⃣ Post to Bitrix
     comment = (
@@ -233,6 +238,5 @@ async def acefone_webhook(payload: AcefoneWebhook, x_secret: str = Header(None))
         f"🔗 [Recording Link]({recording_url})"
     )
 
-    post_comment_to_lead(lead_id, comment)
 
     return {"status": "success", "lead_id": lead_id, "phone": phone}

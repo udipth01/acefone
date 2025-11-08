@@ -243,4 +243,4 @@ async def acefone_webhook(payload: AcefoneWebhook, x_secret: str = Header(None))
     post_comment_to_entity(entity_id, entity_type, comment)
 
 
-    return {"status": "success", "lead_id": lead_id, "phone": phone}
+    return {"status": "success", "entity_id": entity_id, "phone": phone}

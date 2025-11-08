@@ -132,10 +132,10 @@ def find_bitrix_lead_or_contact(phone):
     leads = result.get("LEAD", [])
     contacts = result.get("CONTACT", [])
 
-    if leads:
-        return max(leads), "lead"
-    elif contacts:
+    if contacts:
         return max(contacts), "contact"
+    elif leads:
+        return max(leads), "lead"
 
     return None, None
 

@@ -237,7 +237,7 @@ async def acefone_webhook(payload: AcefoneWebhook, x_secret: str = Header(None))
         f"🔗 [Recording Link]({recording_url})"
     )
 
-    print(f"📲 Logging call for phone={phone}, entity_type={entity_type}, entity_id={entity_id}")
+    print(f"📲 Logging call for  phone={phone}, entity_type={entity_type}, entity_id={entity_id}")
 
     # Then post the summary/comment
     post_comment_to_entity(entity_id, entity_type, comment)

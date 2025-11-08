@@ -226,8 +226,6 @@ async def acefone_webhook(payload: AcefoneWebhook, x_secret: str = Header(None))
         entity_id = create_bitrix_lead(phone)
         entity_type = "lead"
 
-    # Then post the summary/comment
-    post_comment_to_entity(entity_id, entity_type, comment)
 
     # 6️⃣ Post to Bitrix
     comment = (
@@ -237,6 +235,8 @@ async def acefone_webhook(payload: AcefoneWebhook, x_secret: str = Header(None))
         f"🎧 **Transcription:**\n{transcription[:5000]}\n\n"
         f"🔗 [Recording Link]({recording_url})"
     )
+    # Then post the summary/comment
+    post_comment_to_entity(entity_id, entity_type, comment)
 
 
     return {"status": "success", "lead_id": lead_id, "phone": phone}

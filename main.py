@@ -69,11 +69,9 @@ def download_audio(url):
 
 
 def transcribe_with_gemini(audio_bytes):
-    """Transcribe audio using Gemini 2.5 Pro"""
     client = genai.Client(api_key=GEMINI_API_KEY)
 
-    audio_base64 = base64.b64encode(audio_bytes).decode("utf-8")
-
+    # Send audio directly as a single binary part
     response = client.models.generate_content(
         model="models/gemini-2.5-pro",
         contents=[
@@ -81,22 +79,70 @@ def transcribe_with_gemini(audio_bytes):
                 "role": "user",
                 "parts": [
                     {
-                        "inline_data": {
+                        "audio": {
                             "mime_type": "audio/mp3",
-                            "data": audio_base64
+                            "data": audio_bytes
                         }
                     },
                     {
-                        "text": "Transcribe this Hindi-English (Hinglish) mixed phone call accurately, maintaining tone and context."
+                        "text": "Please transcribe this entire phone call in Hinglish. Do not summarize, give complete verbatim text."
                     }
                 ]
             }
         ]
     )
 
-    transcript = response.text.strip()
-    return transcript
+    return response.text.strip()
 
+def transcribe_with_gemini_chunked(audio_bytes):
+    """
+    Chunk the audio into 1 MB parts and send using Gemini 2.5 Pro.
+    This ensures full transcription even for long MP3 phone calls.
+    """
+    client = genai.Client(api_key=GEMINI_API_KEY)
+
+    CHUNK_SIZE = 1024 * 1024  # 1 MB
+    audio_chunks = []
+
+    # Split audio bytes into 1MB chunks
+    for i in range(0, len(audio_bytes), CHUNK_SIZE):
+        audio_chunks.append(audio_bytes[i:i + CHUNK_SIZE])
+
+    # Build parts for the Gemini request
+    parts = []
+    for chunk in audio_chunks:
+        parts.append({
+            "audio": {
+                "mime_type": "audio/mp3",
+                "data": chunk
+            }
+        })
+
+    # Add instruction last
+    parts.append({
+        "text": (
+            "Transcribe this full phone call in Hinglish. "
+            "Give a complete verbatim transcript with speaker labels "
+            "like 'Male:' and 'Female:' where possible. "
+            "Do NOT summarize. Return full text."
+        )
+    })
+
+    # Send to Gemini
+    response = client.models.generate_content(
+        model="models/gemini-2.5-pro",
+        contents=[{
+            "role": "user",
+            "parts": parts
+        }],
+        safety_settings={"HARASSMENT": "BLOCK_NONE", "HATE": "BLOCK_NONE"},
+        generation_config={
+            "temperature": 0.2,
+            "max_output_tokens": 8000
+        },
+    )
+
+    return response.text.strip()
 
 def summarize_with_gemini(transcript):
     """Summarize transcript using Gemini"""
@@ -210,7 +256,7 @@ async def acefone_webhook(payload: AcefoneWebhook, x_secret: str = Header(None))
     # 3️⃣ Download and Transcribe
     try:
         audio_bytes = download_audio(recording_url)
-        transcription = transcribe_with_gemini(audio_bytes)
+        transcription = transcribe_with_gemini_chunked(audio_bytes)
     except Exception as e:
         transcription = f"Transcription failed: {e}"
 

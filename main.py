@@ -223,7 +223,6 @@ def post_comment_to_entity(entity_id, entity_type, text):
 # ==============================
 @app.post("/acefone/call-ended")
 async def acefone_webhook(payload: AcefoneWebhook, x_secret: str = Header(None)):
-    print(f"📲 Logging call for  ACF_SECRET={ACF_SECRET}, x_secret={x_secret}")
     if ACF_SECRET and x_secret != os.getenv("ACF_SECRET"):
         raise HTTPException(status_code=403, detail="Unauthorized")
     

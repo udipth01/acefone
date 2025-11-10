@@ -79,10 +79,11 @@ def transcribe_with_gemini(audio_bytes):
                 "role": "user",
                 "parts": [
                     {
-                        "audio": {
+                        "inline_data": {
                             "mime_type": "audio/mp3",
-                            "data": audio_bytes
+                            "data": base64.b64encode(audio_bytes).decode("utf-8")
                         }
+
                     },
                     {
                         "text": "Please transcribe this entire phone call in Hinglish. Do not summarize, give complete verbatim text."
@@ -133,6 +134,56 @@ def transcribe_with_gemini_chunked(audio_bytes):
 
     return response.text.strip()
 
+def upload_audio_to_gemini(audio_bytes):
+    client = genai.Client(api_key=GEMINI_API_KEY)
+
+    file = client.files.upload_bytes(
+        data=audio_bytes,
+        mime_type="audio/mp3",
+        display_name="acefone_call.mp3"
+    )
+
+    return file
+
+def transcribe_audio_via_file_api(audio_bytes):
+    client = genai.Client(api_key=GEMINI_API_KEY)
+
+    uploaded = upload_audio_to_gemini(audio_bytes)
+
+    response = client.models.generate_content(
+        model="models/gemini-2.5-pro",
+        contents=[
+            {
+                "role": "user",
+                "parts": [
+                    {
+                        "file_data": {
+                            "file_uri": uploaded.file_uri
+                        }
+                    },
+                    {
+                        "text": """
+Transcribe this entire phone call in Hinglish.
+Provide:
+
+- Speaker labels (Male/Female)
+- Timestamps every 15 seconds
+- Complete verbatim text
+- No summary
+
+Return full transcript.
+"""
+                    }
+                ]
+            }
+        ],
+        config=dict(
+            temperature=0.1,
+            max_output_tokens=64000,
+        )
+    )
+
+    return response.text.strip()
 
 def summarize_with_gemini(transcript):
     """Summarize transcript using Gemini"""
@@ -246,7 +297,7 @@ async def acefone_webhook(payload: AcefoneWebhook, x_secret: str = Header(None))
     # 3️⃣ Download and Transcribe
     try:
         audio_bytes = download_audio(recording_url)
-        transcription = transcribe_with_gemini_chunked(audio_bytes)
+        transcription = transcribe_audio_via_file_api(audio_bytes)
     except Exception as e:
         transcription = f"Transcription failed: {e}"
 

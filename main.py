@@ -137,13 +137,14 @@ def transcribe_with_gemini_chunked(audio_bytes):
 def upload_audio_to_gemini(audio_bytes):
     client = genai.Client(api_key=GEMINI_API_KEY)
 
-    file = client.files.upload_bytes(
-        data=audio_bytes,
-        mime_type="audio/mp3",
+    # Correct universal upload API
+    file = client.files.upload(
+        file={"data": audio_bytes, "mime_type": "audio/mp3"},
         display_name="acefone_call.mp3"
     )
 
     return file
+
 
 def transcribe_audio_via_file_api(audio_bytes):
     client = genai.Client(api_key=GEMINI_API_KEY)

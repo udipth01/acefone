@@ -96,42 +96,39 @@ def transcribe_with_gemini(audio_bytes):
 
 def transcribe_with_gemini_chunked(audio_bytes):
     """
-    Chunk the audio into 1MB pieces and send to Gemini 2.5 Pro
-    with stable transcription settings.
+    Chunk audio into 1MB pieces and send to Gemini 2.5 Pro.
+    Fully compatible with the latest google-genai SDK.
     """
     client = genai.Client(api_key=GEMINI_API_KEY)
 
-    CHUNK_SIZE = 1024 * 1024  # 1MB
-
-    # Break audio into multiple chunks
+    CHUNK_SIZE = 1024 * 1024  # 1 MB
     parts = []
+
+    # Chunk the audio
     for i in range(0, len(audio_bytes), CHUNK_SIZE):
-        chunk = audio_bytes[i:i + CHUNK_SIZE]
         parts.append({
-            "audio": {
+            "inline_data": {
                 "mime_type": "audio/mp3",
-                "data": chunk
+                "data": base64.b64encode(audio_bytes[i:i + CHUNK_SIZE]).decode("utf-8")
             }
         })
 
-    # Add the instruction at the end
+    # Add last instruction part
     parts.append({
         "text": (
-            "Transcribe this complete phone call in Hinglish. "
-            "Provide full verbatim text with timestamps and speaker labels "
-            "like Male: and Female:. Do NOT summarize. Output full transcription only."
+            "Transcribe this full phone call in Hinglish. "
+            "Give complete verbatim text with timestamps and speaker labels "
+            "like 'Male:' and 'Female:'. Do NOT summarize."
         )
     })
 
-    # Send to Gemini
     response = client.models.generate_content(
         model="models/gemini-2.5-pro",
         contents=[{"role": "user", "parts": parts}],
-        generation_config={
-            "temperature": 0.1,
-            "max_output_tokens": 32000,
-            "response_modalities": ["text"]
-        }
+        config=dict(
+            temperature=0.2,
+            max_output_tokens=64000,
+        )
     )
 
     return response.text.strip()

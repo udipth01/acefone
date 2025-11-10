@@ -96,21 +96,17 @@ def transcribe_with_gemini(audio_bytes):
 
 def transcribe_with_gemini_chunked(audio_bytes):
     """
-    Chunk the audio into 1 MB parts and send using Gemini 2.5 Pro.
-    This ensures full transcription even for long MP3 phone calls.
+    Chunk the audio into 1MB pieces and send to Gemini 2.5 Pro
+    with stable transcription settings.
     """
     client = genai.Client(api_key=GEMINI_API_KEY)
 
-    CHUNK_SIZE = 1024 * 1024  # 1 MB
-    audio_chunks = []
+    CHUNK_SIZE = 1024 * 1024  # 1MB
 
-    # Split audio bytes into 1MB chunks
-    for i in range(0, len(audio_bytes), CHUNK_SIZE):
-        audio_chunks.append(audio_bytes[i:i + CHUNK_SIZE])
-
-    # Build parts for the Gemini request
+    # Break audio into multiple chunks
     parts = []
-    for chunk in audio_chunks:
+    for i in range(0, len(audio_bytes), CHUNK_SIZE):
+        chunk = audio_bytes[i:i + CHUNK_SIZE]
         parts.append({
             "audio": {
                 "mime_type": "audio/mp3",
@@ -118,31 +114,28 @@ def transcribe_with_gemini_chunked(audio_bytes):
             }
         })
 
-    # Add instruction last
+    # Add the instruction at the end
     parts.append({
         "text": (
-            "Transcribe this full phone call in Hinglish. "
-            "Give a complete verbatim transcript with speaker labels "
-            "like 'Male:' and 'Female:' where possible. "
-            "Do NOT summarize. Return full text."
+            "Transcribe this complete phone call in Hinglish. "
+            "Provide full verbatim text with timestamps and speaker labels "
+            "like Male: and Female:. Do NOT summarize. Output full transcription only."
         )
     })
 
     # Send to Gemini
     response = client.models.generate_content(
         model="models/gemini-2.5-pro",
-        contents=[{
-            "role": "user",
-            "parts": parts
-        }],
-        safety_settings={"HARASSMENT": "BLOCK_NONE", "HATE": "BLOCK_NONE"},
+        contents=[{"role": "user", "parts": parts}],
         generation_config={
-            "temperature": 0.2,
-            "max_output_tokens": 8000
-        },
+            "temperature": 0.1,
+            "max_output_tokens": 32000,
+            "response_modalities": ["text"]
+        }
     )
 
     return response.text.strip()
+
 
 def summarize_with_gemini(transcript):
     """Summarize transcript using Gemini"""

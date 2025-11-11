@@ -45,15 +45,40 @@ def acefone_login():
 
 
 def fetch_call_details(token, call_id):
-    """Fetch specific call record using /call/records"""
+    """Fetch a specific Acefone call record with retry + safe handling."""
     headers = {"Authorization": f"Bearer {token}", "accept": "application/json"}
-    r = requests.get(ACEFONE_LOG_URL, headers=headers, params={"page": 1, "limit": 100})
-    r.raise_for_status()
-    data = r.json()
-    results = data.get("results", [])
-    for call in results:
-        if str(call.get("call_id")) == str(call_id):
-            return call
+
+    for attempt in range(4):
+        try:
+            r = requests.get(
+                ACEFONE_LOG_URL,
+                headers=headers,
+                params={"page": 1, "limit": 100},
+                timeout=10
+            )
+
+            # If Acefone returns 500, retry
+            if r.status_code >= 500:
+                print(f"⚠️ Acefone returned {r.status_code}, retry {attempt+1}/4...")
+                time.sleep(3)
+                continue
+
+            r.raise_for_status()
+            data = r.json()
+
+            results = data.get("results", [])
+
+            for call in results:
+                if str(call.get("call_id")) == str(call_id):
+                    return call
+            
+            return None
+
+        except Exception as e:
+            print(f"⚠️ Error fetching call record: {e}, retrying...")
+            time.sleep(2)
+
+    # After all retries, return None (don’t crash the webhook)
     return None
 
 
@@ -199,7 +224,12 @@ async def acefone_webhook(payload: AcefoneWebhook, x_secret: str = Header(None))
     # 2️⃣ Fetch call details
     call_data = fetch_call_details(token, payload.call_id)
     if not call_data:
-        return {"error": "Call not found in Acefone records"}
+        return {
+            "status": "no-record",
+            "message": "Acefone returned 500 / no call record found",
+            "call_id": payload.call_id
+        }
+
 
     recording_url = call_data.get("recording_url")
     phone = call_data.get("client_number") or call_data.get("did_number")
